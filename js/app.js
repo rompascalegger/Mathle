@@ -65,36 +65,34 @@
     });
   }
   function parseWords(raw) {
+    // WORT | Hinweis | Kapitel  – der Hinweis darf selbst "|" enthalten (z.B. Beträge)
     return String(raw || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
-      const p = l.split('|').map((s) => s.trim()); return { w: p[0].toUpperCase(), hint: p[1] || '', ch: p[2] || '' };
+      const m = l.match(/^(\S+)\s*\|\s*(.*?)\s*\|\s*([\w-]+)$/) || l.match(/^(\S+)\s*\|\s*(.*)$/);
+      return m ? { w: m[1].toUpperCase(), hint: m[2] || '', ch: m[3] || '' } : { w: l.toUpperCase(), hint: '', ch: '' };
     });
   }
 
-  const CHAPTERS = parseQuestions(M.raw && M.raw.la);
-  parseCards(M.raw && M.raw.laDefs, CHAPTERS);
-  const WORDS = parseWords(M.raw && M.raw.laWords);
-  const ALLQ = CHAPTERS.flatMap((c) => c.questions);
-  const ALLC = CHAPTERS.flatMap((c) => c.cards);
-  const chById = (id) => CHAPTERS.find((c) => c.id === id);
-
-  const BOSSES = {
-    logik: { name: 'Die Sphinx der Logik', icon: '🦁', taunt: 'Wer lügt, wenn alle die Wahrheit sagen?' },
-    mengen: { name: 'Die Hydra der Mengen', icon: '🐉', taunt: 'Schlag mir einen Kopf ab – die Potenzmenge wächst nach!' },
-    gruppen: { name: 'Die Monstergruppe', icon: '👾', taunt: '808017424794512875886459904961710757005754368000000000 Elemente gegen dich.' },
-    ringe: { name: 'Der Nullring', icon: '💍', taunt: 'Bei mir ist 1 = 0. Viel Glück.' },
-    matrizen: { name: 'Der Matrix-Golem', icon: '🗿', taunt: 'AB ≠ BA. Gewöhn dich dran.' },
-    gauss: { name: 'Der Geist von Gauss', icon: '👻', taunt: 'Bring mich in Zeilenstufenform – wenn du kannst.' }
-  };
-
-  const SUBJECTS = [
-    { id: 'la', title: 'Lineare Algebra I', sub: 'Logik · Mengen · Gruppen · Ringe · Matrizen · Gauss', icon: '▦', active: true },
-    { id: 'an', title: 'Analysis I', sub: 'Folgen · Reihen · Stetigkeit · Differenzierbarkeit', icon: '∫', active: false },
-    { id: 'eis', title: 'EiS – Stochastik', sub: 'Wahrscheinlichkeit · Zufallsvariablen · Verteilungen', icon: '⚄', active: false }
-  ];
+  /* ---------- Fächer ---------- */
+  const SUBJECTS = (M.subjects || []).map((s) => {
+    const chapters = parseQuestions(M.raw[s.raw]);
+    parseCards(M.raw[s.defs], chapters);
+    return Object.assign({}, s, {
+      chapters, words: parseWords(M.raw[s.words]), similarList: (M.similar || {})[s.id] || [],
+      allQ: chapters.flatMap((c) => c.questions), allC: chapters.flatMap((c) => c.cards), bosses: s.bosses || {}
+    });
+  }).filter((s) => s.chapters.length);
+  const ALL_CHAPTERS = SUBJECTS.flatMap((s) => s.chapters);
+  let SUBJ, CHAPTERS, WORDS, ALLQ, ALLC, BOSSES, SIMILAR;
+  function setSubject(id) {
+    SUBJ = SUBJECTS.find((s) => s.id === id) || SUBJECTS[0];
+    CHAPTERS = SUBJ.chapters; WORDS = SUBJ.words; ALLQ = SUBJ.allQ; ALLC = SUBJ.allC; BOSSES = SUBJ.bosses; SIMILAR = SUBJ.similarList;
+  }
+  const chById = (id) => ALL_CHAPTERS.find((c) => c.id === id);
+  const dkey = () => SUBJ.id + ':' + today(); // Tageskey pro Fach
 
   /* ============================== Speicher ============================== */
   const KEY = 'mathle:v1';
-  const DEF = { xp: 0, q: {}, c: {}, days: {}, daily: {}, ach: {}, boss: {}, challenge: {}, mathle: {}, blitzBest: 0, bestCombo: 0, totalCorrect: 0, cardsSeen: 0, flags: {}, sound: true, theme: null };
+  const DEF = { xp: 0, q: {}, c: {}, days: {}, daily: {}, ach: {}, boss: {}, challenge: {}, mathle: {}, blitzBest: 0, blitz: {}, bestCombo: 0, totalCorrect: 0, cardsSeen: 0, flags: {}, sound: true, theme: null, subj: 'la' };
   let S;
   try { S = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { S = {}; }
   S = Object.assign(JSON.parse(JSON.stringify(DEF)), S);
@@ -197,13 +195,14 @@
     { id: 'combo25', icon: '☄️', t: 'Unaufhaltsam', d: 'Erreiche eine 25er-Combo', ok: () => S.bestCombo >= 25 },
     { id: 'perfect', icon: '💎', t: 'Lupenrein', d: 'Eine Runde mit 10+ Fragen ohne Fehler', ok: () => !!S.flags.perfect },
     { id: 'boss1', icon: '⚔️', t: 'Bossbezwinger', d: 'Besiege deinen ersten Boss', ok: () => Object.values(S.boss).some((b) => b.won) },
-    { id: 'bossall', icon: '👑', t: 'Herrscher über LA I', d: 'Besiege alle sechs Bosse', ok: () => CHAPTERS.every((c) => S.boss[c.id] && S.boss[c.id].won) },
+    { id: 'bossall', icon: '👑', t: 'Fachherrscher', d: 'Besiege alle Bosse eines Fachs', ok: () => SUBJECTS.some((s) => s.chapters.every((c) => S.boss[c.id] && S.boss[c.id].won)) },
+    { id: 'polymath', icon: '🧭', t: 'Allrounder', d: 'Beantworte in allen drei Fächern Fragen richtig', ok: () => SUBJECTS.every((s) => s.allQ.some((q) => S.q[q.id] && S.q[q.id].c > 0)) },
     { id: 'flawless', icon: '🛡️', t: 'Unberührbar', d: 'Besiege einen Boss ohne Herz zu verlieren', ok: () => !!S.flags.flawless },
     { id: 'blitz15', icon: '⚡', t: 'Blitzmerker', d: '15 Punkte in der Blitzrunde', ok: () => S.blitzBest >= 15 },
     { id: 'blitz30', icon: '🌩️', t: 'Gewitter im Kopf', d: '30 Punkte in der Blitzrunde', ok: () => S.blitzBest >= 30 },
     { id: 'cards50', icon: '🗂️', t: 'Kartenhai', d: 'Lerne 50 Karteikarten', ok: () => S.cardsSeen >= 50 },
     { id: 'cards300', icon: '🧠', t: 'Elefantengedächtnis', d: 'Lerne 300 Karteikarten', ok: () => S.cardsSeen >= 300 },
-    { id: 'master', icon: '🎓', t: 'Kapitelmeister', d: 'Meistere ein Kapitel zu 100 %', ok: () => CHAPTERS.some((c) => progress(c) >= 0.999) },
+    { id: 'master', icon: '🎓', t: 'Kapitelmeister', d: 'Meistere ein Kapitel zu 100 %', ok: () => ALL_CHAPTERS.some((c) => progress(c) >= 0.999) },
     { id: 'streak3', icon: '📅', t: 'Dranbleiber', d: '3 Tage in Folge gelernt', ok: () => streak() >= 3 },
     { id: 'streak7', icon: '🗓️', t: 'Wochenserie', d: '7 Tage in Folge gelernt', ok: () => streak() >= 7 },
     { id: 'lvl5', icon: '⭐', t: 'Aufsteiger', d: 'Erreiche Level 5', ok: () => levelInfo(S.xp).L >= 5 },
@@ -337,9 +336,9 @@
       const v = Math.min(q.goal, q.v(d)), done = !!d.quests[q.id];
       return '<div class="quest' + (done ? ' done' : '') + '"><div class="qrow"><span>' + (done ? '✅' : '🎯') + ' ' + q.t + '</span><small>' + v + '/' + q.goal + '</small></div><div class="bar"><i style="width:' + (100 * v / q.goal) + '%"></i></div></div>';
     }).join('');
-    const subj = SUBJECTS.map((s) => '<button class="subject' + (s.active ? '' : ' locked') + '" ' + (s.active ? 'data-subj="' + s.id + '"' : 'disabled') + '>' +
-      '<span class="subj-icon">' + s.icon + '</span><span class="subj-text"><b>' + s.title + '</b><small>' + s.sub + '</small></span>' +
-      (s.active ? '<span class="subj-prog">' + Math.round(100 * CHAPTERS.reduce((a, c) => a + progress(c), 0) / CHAPTERS.length) + '%</span>' : '<span class="soon">bald</span>') + '</button>').join('');
+    const subj = SUBJECTS.map((s) => '<button class="subject" data-subj="' + s.id + '">' +
+      '<span class="subj-icon">' + s.icon + '</span><span class="subj-text"><b>' + s.title + '</b><small>' + s.sub + ' · ' + s.allQ.length + ' Fragen, ' + s.allC.length + ' Karten</small></span>' +
+      '<span class="subj-prog">' + Math.round(100 * s.chapters.reduce((a, c) => a + progress(c), 0) / s.chapters.length) + '%</span></button>').join('');
     view(
       '<section class="hero"><div><p class="eyebrow">' + greet() + '</p><h1>Höhere Mathematik,<br><span class="grad">Level für Level.</span></h1>' +
       '<p class="muted">Definitionen pauken, Formeln festigen, Bosse besiegen. Rang: <b>' + title(li.L) + '</b> · ' + S.xp + ' XP gesamt</p></div></section>' +
@@ -350,7 +349,7 @@
     );
     app.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.subj) go('hub');
+      if (b.dataset.subj) go('hub', b.dataset.subj);
       if (b.hasAttribute('data-ach')) go('achievements');
       if (b.hasAttribute('data-stats')) go('stats');
     };
@@ -361,9 +360,11 @@
     return g + (st > 1 ? ' 🔥 ' + st + ' Tage in Folge' : S.days[today()] ? '' : ' Starte heute deine Serie.');
   }
 
-  SCREENS.hub = function () {
-    const ch = S.challenge[today()];
-    const ml = S.mathle[today()];
+  SCREENS.hub = function (sid) {
+    if (sid) { setSubject(sid); S.subj = SUBJ.id; save(); }
+    const ch = S.challenge[dkey()];
+    const ml = S.mathle[dkey()];
+    const best = S.blitz[SUBJ.id] || 0;
     const mis = mistakes().length;
     const chapters = CHAPTERS.map((c) => {
       const p = progress(c), b = S.boss[c.id], boss = BOSSES[c.id] || { icon: '👹' };
@@ -374,20 +375,20 @@
     }).join('');
     view(
       '<div class="crumbs"><button class="link" data-home>← Fächer</button></div>' +
-      '<h1 class="page">Lineare Algebra I</h1><p class="muted">Basierend auf Skript (Stand 2. November 2026) und Serien 1–8.</p>' +
+      '<h1 class="page">' + SUBJ.icon + ' ' + SUBJ.title + '</h1><p class="muted">' + amp(SUBJ.basis || '') + '</p>' +
       '<h2 class="sec">Auswendig lernen</h2><div class="tiles">' +
       tile('cards', '🗂️', 'Karteikarten', ALLC.length + ' Definitionen & Formeln · aufdecken & bewerten', 'learn') +
       tile('drill', '🧠', 'Definitions-Drill', 'Begriff ↔ Definition zuordnen · Combo jagen', 'learn') +
       '</div>' +
       '<h2 class="sec">Challenges</h2><div class="tiles">' +
       tile('daily', '📆', 'Tages-Challenge', ch ? 'Erledigt: ' + ch.score + '/10 · morgen neu' : '10 Fragen · einmal pro Tag · Bonus-XP', 'chal' + (ch ? ' done' : '')) +
-      tile('blitz', '⚡', 'Blitzrunde', '60 Sekunden · +1/−1 wie in Serie 1 · Rekord: ' + S.blitzBest, 'chal') +
+      tile('blitz', '⚡', 'Blitzrunde', '60 Sekunden · +1/−1 pro Antwort · Rekord: ' + best, 'chal') +
       tile('mathle', '🔤', 'Mathle', ml && ml.done ? (ml.won ? 'Gelöst in ' + ml.guesses.length + ' Versuchen' : 'Heute nicht gelöst') + ' · Übungswort spielen' : 'Fachbegriff des Tages erraten', 'chal' + (ml && ml.done ? ' done' : '')) +
       tile('mix', '🎲', 'Alles gemischt', '10 Fragen aus allen Kapiteln', 'chal') +
       (mis ? tile('mistakes', '🩹', 'Fehler ausbügeln', mis + ' Fragen warten auf Revanche', 'warn') : '') +
       '</div>' +
       '<h2 class="sec">Kapitel</h2><div class="chapters">' + chapters + '</div>' +
-      '<div class="soon-box"><b>Bald verfügbar:</b> Analysis I und EiS (Einführung in die Stochastik).</div>'
+      '<div class="soon-box">📖 Jede Frage und Karte nennt die Skriptseite und die passende Serienaufgabe.</div>'
     );
     app.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -410,7 +411,6 @@
   }
 
   /* ---------- Generierte Fragen aus Karteikarten ---------- */
-  const SIMILAR = M.similarCards || [];
   function similar(a, b) { return a.back === b.back || SIMILAR.some((g) => g.includes(a.front) && g.includes(b.front)); }
   function distractors(card, n) {
     const ok = (c) => c.id !== card.id && !similar(card, c);
@@ -518,7 +518,7 @@
         $('.qcard').classList.add('shake');
         if (ses.boss) ses.hearts--;
       }
-      addXP(gained, chosenEl || $('.qcard'));
+      addXP(gained, chosenEl || $('.qcard')); save();
       // Markierungen
       $$('.ans').forEach((b) => {
         b.disabled = true;
@@ -616,7 +616,7 @@
       headline = pct >= 0.95 ? 'Perfekt! 💎' : pct >= 0.75 ? 'Stark gemacht!' : pct >= 0.5 ? 'Gut dabei!' : 'Weiter üben – das wird!';
       if (pct === 1 && total >= 10) S.flags.perfect = true;
       if (ses.mode === 'daily' && !ses.replay) {
-        S.challenge[today()] = { score: ses.ok }; d.challenge++; bonus = 30 + 10 * ses.ok;
+        S.challenge[dkey()] = { score: ses.ok }; d.challenge++; bonus = 30 + 10 * ses.ok;
       } else if (total >= 5) bonus = stars * 10;
       if (stars >= 2) { SFX.win(); setTimeout(() => confetti(stars * 80), 100); }
     }
@@ -685,8 +685,8 @@
       return deck.pop();
     }
     function intro() {
-      view('<div class="boss-intro"><div class="boss-big">⚡</div><h1>Blitzrunde</h1><p class="muted">60 Sekunden. Wahr oder falsch? Passt die Definition?<br>Wie in Serie 1: <b>+1</b> für richtig, <b>−1</b> für falsch.<br>Alle 5 Treffer in Folge: <b>+3 Sekunden</b>.</p>' +
-        '<p class="muted">Tasten: <kbd>1</kbd> / <kbd>←</kbd> wahr · <kbd>2</kbd> / <kbd>→</kbd> falsch</p><p>Rekord: <b>' + S.blitzBest + '</b></p>' +
+      view('<div class="boss-intro"><div class="boss-big">⚡</div><h1>Blitzrunde</h1><p class="muted">60 Sekunden. Wahr oder falsch? Passt die Definition?<br>Wie in LA-Serie 1: <b>+1</b> für richtig, <b>−1</b> für falsch.<br>Alle 5 Treffer in Folge: <b>+3 Sekunden</b>.</p>' +
+        '<p class="muted">Tasten: <kbd>1</kbd> / <kbd>←</kbd> wahr · <kbd>2</kbd> / <kbd>→</kbd> falsch</p><p>Rekord in ' + SUBJ.title + ': <b>' + (S.blitz[SUBJ.id] || 0) + '</b></p>' +
         '<div class="actions"><button class="btn primary big" data-start>Los geht\'s!</button><button class="btn" data-hub>Zurück</button></div></div>');
     }
     function start() {
@@ -728,15 +728,16 @@
     function end() {
       if (ended) return; ended = true;
       running = false; clearInterval(timer);
-      const record = score > S.blitzBest;
-      if (record) S.blitzBest = score;
+      const record = score > (S.blitz[SUBJ.id] || 0);
+      if (record) S.blitz[SUBJ.id] = score;
+      S.blitzBest = Math.max(S.blitzBest, score);
       D().blitz = Math.max(D().blitz, score);
       save();
       const xp = Math.max(0, score * 3) + (record ? 30 : 0);
       if (record && score > 0) { SFX.win(); confetti(220); } else SFX.quest();
       const rev = wrong.slice(-8).map((q) => '<div class="review"><div class="qtext sm">' + amp(q.q) + '</div><p class="ans-line">' + answerText(q) + '</p>' + (q.explain ? '<p class="muted">' + amp(q.explain) + '</p>' : '') + '</div>').join('');
       view('<div class="result"><div class="blitz-final">' + score + '</div><h1>' + (record && score > 0 ? 'Neuer Rekord! 🏆' : 'Zeit abgelaufen!') + '</h1>' +
-        '<div class="stats"><div><b>' + S.blitzBest + '</b><small>Rekord</small></div><div><b>' + maxCombo + '</b><small>beste Combo</small></div><div class="bigxp"><b data-count="' + xp + '">0</b><small>XP</small></div></div>' +
+        '<div class="stats"><div><b>' + (S.blitz[SUBJ.id] || 0) + '</b><small>Rekord</small></div><div><b>' + maxCombo + '</b><small>beste Combo</small></div><div class="bigxp"><b data-count="' + xp + '">0</b><small>XP</small></div></div>' +
         '<div class="actions"><button class="btn primary" data-again>Nochmal</button><button class="btn" data-hub>Zur Übersicht</button></div>' + (rev ? '<h2 class="sec">Das ging daneben</h2>' + rev : '') + '</div>');
       countUp($('[data-count]'));
       setTimeout(() => addXP(xp, $('.bigxp')), 600);
@@ -767,7 +768,7 @@
     function render() {
       const due = ALLC.filter((c) => chs.has(c.ch) && (kind === 'all' || c.kind === kind));
       const fresh = due.filter((c) => !S.c[c.id]).length;
-      view('<div class="crumbs"><button class="link" data-hub>← Lineare Algebra I</button></div><h1 class="page">Karteikarten</h1>' +
+      view('<div class="crumbs"><button class="link" data-hub>← ' + SUBJ.title + '</button></div><h1 class="page">Karteikarten</h1>' +
         '<p class="muted">Begriff ansehen, Definition im Kopf aufsagen, Karte umdrehen und ehrlich bewerten. Was du nicht wusstest, kommt öfter dran.</p>' +
         '<h2 class="sec">Kapitel</h2><div class="chips">' + CHAPTERS.map((c) => '<button class="chip toggle' + (chs.has(c.id) ? ' on' : '') + '" data-ch="' + c.id + '">' + c.title + ' <small>' + c.cards.length + '</small></button>').join('') + '</div>' +
         '<h2 class="sec">Art</h2><div class="chips">' + [['all', 'Alles'], ['D', 'Definitionen'], ['F', 'Formeln & Sätze']].map((k) => '<button class="chip toggle' + (kind === k[0] ? ' on' : '') + '" data-kind="' + k[0] + '">' + k[1] + '</button>').join('') + '</div>' +
@@ -808,7 +809,7 @@
       $('#grade').innerHTML = '<button class="btn g0" data-g="0"><kbd>1</kbd>Nochmal</button><button class="btn g1" data-g="1"><kbd>2</kbd>Schwer</button><button class="btn g2" data-g="2"><kbd>3</kbd>Gewusst!</button>';
     }
     function grade(g) {
-      const c = queue[idx]; recordC(c.id, g); stats[g]++;
+      const c = queue[idx]; recordC(c.id, g); stats[g]++; save();
       S.cardsSeen++; D().cards++;
       const gain = g === 2 ? 5 : g === 1 ? 2 : 0;
       if (g === 2) { streakK++; SFX.good(streakK); if (streakK % 5 === 0) { SFX.combo(); confetti(50, innerWidth / 2, 160); } } else { streakK = 0; if (g === 0) SFX.bad(); else SFX.tick(); }
@@ -851,10 +852,10 @@
   /* ---------- Mathle (Begriff raten) ---------- */
   SCREENS.mathle = function (cfg) {
     const daily = cfg && cfg.daily;
-    const list = shuffle(WORDS, rng(20261108));
+    const list = shuffle(WORDS, rng(20261108 + hashStr(SUBJ.id)));
     const target = daily ? list[dayNum(today()) % list.length] : pick(WORDS);
     const W = target.w, LEN = [...W].length, TRIES = 6;
-    const saved = daily ? S.mathle[today()] : null;
+    const saved = daily ? S.mathle[dkey()] : null;
     let guesses = saved ? saved.guesses.slice() : [], curG = '', done = saved ? saved.done : false, hint = guesses.length >= 3;
     const KB = ['QWERTZUIOPÜ', 'ASDFGHJKLÖÄ', 'YXCVBNM'];
     function evalG(g) {
@@ -887,7 +888,7 @@
         status = '<div class="feedback ' + (won ? 'ok' : 'no') + '"><b>' + (won ? 'Gelöst in ' + guesses.length + '! 🎉' : 'Das Wort war: ' + W) + '</b><p>' + amp(target.hint) + '</p>' +
           '<div class="actions"><button class="btn primary" data-new>Übungswort</button><button class="btn" data-hub>Zur Übersicht</button></div></div>';
       }
-      view('<div class="crumbs"><button class="link" data-hub>← Lineare Algebra I</button></div><div class="mathle-head"><h1 class="page">Mathle' + (daily ? ' des Tages' : '') + '</h1>' +
+      view('<div class="crumbs"><button class="link" data-hub>← ' + SUBJ.title + '</button></div><div class="mathle-head"><h1 class="page">Mathle' + (daily ? ' des Tages' : '') + '</h1>' +
         '<p class="muted">Errate den Fachbegriff (' + LEN + ' Buchstaben) in 6 Versuchen. Thema: <b>' + (ch ? ch.title : '') + '</b></p>' +
         (hint || done ? '<div class="defbox sm">💡 ' + amp(target.hint) + '</div>' : '<button class="chip" data-hint>💡 Tipp zeigen (−15 XP)</button>') + '</div>' +
         '<div class="wgrid" style="--n:' + LEN + '">' + rows.join('') + '</div>' + status + (done ? '' : '<div class="kb">' + kb + '</div>'));
@@ -898,7 +899,7 @@
       const won = guesses[guesses.length - 1] === W;
       if (won || guesses.length >= TRIES) done = true;
       if (guesses.length >= 3) hint = true;
-      if (daily) { S.mathle[today()] = { guesses: guesses.slice(), done, won }; }
+      if (daily) { S.mathle[dkey()] = { guesses: guesses.slice(), done, won }; }
       render(guesses.length - 1);
       const delay = LEN * 120 + 300;
       if (won) {
@@ -955,8 +956,9 @@
     view('<div class="crumbs"><button class="link" data-home>← Start</button></div><h1 class="page">Statistik</h1>' +
       '<div class="stats"><div><b>' + li.L + '</b><small>Level</small></div><div><b>' + S.xp + '</b><small>XP gesamt</small></div><div><b>' + streak() + '</b><small>Tage-Serie</small></div><div><b>' + S.bestCombo + '</b><small>beste Combo</small></div></div>' +
       '<div class="panel"><div class="panel-head"><h2>XP der letzten 14 Tage</h2></div><div class="chart">' + days.map((x) => '<div class="col" title="' + x.d + ': ' + x.xp + ' XP"><i style="height:' + (100 * x.xp / max) + '%"></i><small>' + x.d.slice(8) + '</small></div>').join('') + '</div></div>' +
-      '<div class="panel"><p>Fragen gesehen: <b>' + qSeen + '/' + ALLQ.length + '</b> · Karten gesehen: <b>' + cSeen + '/' + ALLC.length + '</b> · Blitz-Rekord: <b>' + S.blitzBest + '</b></p>' +
-      CHAPTERS.map((c) => '<div class="qrow"><span>' + c.title + '</span><small>' + Math.round(100 * progress(c)) + '%</small></div><div class="bar"><i style="width:' + (100 * progress(c)) + '%"></i></div>').join('') + '</div>' +
+      '<div class="panel"><p>Fragen gesehen: <b>' + qSeen + '/' + SUBJECTS.reduce((a, s) => a + s.allQ.length, 0) + '</b> · Karten gesehen: <b>' + cSeen + '/' + SUBJECTS.reduce((a, s) => a + s.allC.length, 0) + '</b> · Bester Blitz: <b>' + S.blitzBest + '</b></p></div>' +
+      SUBJECTS.map((s) => '<div class="panel"><div class="panel-head"><h2>' + s.icon + ' ' + s.title + '</h2><small>Blitz-Rekord ' + (S.blitz[s.id] || 0) + '</small></div>' +
+        s.chapters.map((c) => '<div class="qrow"><span>' + c.title + '</span><small>' + Math.round(100 * progress(c)) + '%</small></div><div class="bar"><i style="width:' + (100 * progress(c)) + '%"></i></div>').join('') + '</div>').join('') +
       '<div class="actions"><button class="btn danger" data-reset>Fortschritt zurücksetzen</button></div>');
     app.onclick = (e) => {
       if (e.target.closest('[data-home]')) go('home');
@@ -968,6 +970,7 @@
   };
 
   /* ============================== Start ============================== */
+  setSubject(S.subj);
   applyTheme();
   renderHud();
   if (!window.renderMathInElement) {
