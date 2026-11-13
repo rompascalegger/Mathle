@@ -92,7 +92,7 @@
 
   /* ============================== Speicher ============================== */
   const KEY = 'mathle:v1';
-  const DEF = { xp: 0, q: {}, c: {}, days: {}, daily: {}, ach: {}, boss: {}, challenge: {}, mathle: {}, blitzBest: 0, blitz: {}, bestCombo: 0, totalCorrect: 0, cardsSeen: 0, flags: {}, sound: true, theme: null, subj: 'la' };
+  const DEF = { xp: 0, q: {}, c: {}, days: {}, daily: {}, ach: {}, boss: {}, challenge: {}, mathle: {}, blitzBest: 0, blitz: {}, ex: {}, bestCombo: 0, totalCorrect: 0, cardsSeen: 0, flags: {}, sound: true, theme: null, subj: 'la' };
   let S;
   try { S = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { S = {}; }
   S = Object.assign(JSON.parse(JSON.stringify(DEF)), S);
@@ -344,12 +344,14 @@
       '<p class="muted">Definitionen pauken, Formeln festigen, Bosse besiegen. Rang: <b>' + title(li.L) + '</b> · ' + S.xp + ' XP gesamt</p></div></section>' +
       '<section class="panel"><div class="panel-head"><h2>Tagesquests</h2><small>+' + QUEST_XP + ' XP je Quest · alle drei: +100</small></div>' + quests + '</section>' +
       '<section><h2 class="sec">Fächer</h2><div class="subjects">' + subj + '</div></section>' +
+      '<section><h2 class="sec">Übungsblätter</h2><button class="tile wide-tile chal" data-ex><span class="ticon">📚</span><b>Alle Übungsaufgaben</b><small>' + EXERCISES.length + ' Aufgaben aus allen Serien · durchsuchbar · nach Typ sortiert · ähnliche Aufgaben erzeugen · ' + EXERCISES.filter((x) => S.ex[x.id] && S.ex[x.id].done).length + ' erledigt</small></button></section>' +
       '<section class="row2"><button class="tile small" data-ach><span class="ticon">🏅</span><b>Erfolge</b><small>' + Object.keys(S.ach).length + '/' + ACH.length + ' freigeschaltet</small></button>' +
       '<button class="tile small" data-stats><span class="ticon">📈</span><b>Statistik</b><small>' + S.totalCorrect + ' richtige Antworten</small></button></section>'
     );
     app.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.subj) go('hub', b.dataset.subj);
+      if (b.hasAttribute('data-ex')) go('uebungen', {});
       if (b.hasAttribute('data-ach')) go('achievements');
       if (b.hasAttribute('data-stats')) go('stats');
     };
@@ -380,6 +382,10 @@
       tile('cards', '🗂️', 'Karteikarten', ALLC.length + ' Definitionen & Formeln · aufdecken & bewerten', 'learn') +
       tile('drill', '🧠', 'Definitions-Drill', 'Begriff ↔ Definition zuordnen · Combo jagen', 'learn') +
       '</div>' +
+      '<h2 class="sec">Übungsblätter</h2><div class="tiles">' +
+      tile('uebungen', '📚', 'Übungsaufgaben', EXERCISES.filter((x) => x.subj === SUBJ.id).length + ' Aufgaben aus den Serien · Suche, Index, ähnliche Aufgaben', 'chal') +
+      tile('typen', '🧭', 'Aufgabentypen', 'Welche Arten von Aufgaben gibt es – und wie geht man sie an?', 'learn') +
+      '</div>' +
       '<h2 class="sec">Challenges</h2><div class="tiles">' +
       tile('daily', '📆', 'Tages-Challenge', ch ? 'Erledigt: ' + ch.score + '/10 · morgen neu' : '10 Fragen · einmal pro Tag · Bonus-XP', 'chal' + (ch ? ' done' : '')) +
       tile('blitz', '⚡', 'Blitzrunde', '60 Sekunden · +1/−1 pro Antwort · Rekord: ' + best, 'chal') +
@@ -395,6 +401,8 @@
       if (b.hasAttribute('data-home')) return go('home');
       const m = b.dataset.mode;
       if (m === 'cards') go('cardsSetup');
+      if (m === 'uebungen') go('uebungen', { subj: SUBJ.id });
+      if (m === 'typen') go('uebungen', { subj: SUBJ.id, tab: 'typen' });
       if (m === 'drill') go('quiz', { mode: 'drill', items: buildDrill(ALLC, 12) });
       if (m === 'daily') go('quiz', { mode: 'daily', items: buildDaily(), replay: !!ch });
       if (m === 'blitz') go('blitz');
@@ -967,6 +975,143 @@
       }
     };
     screen = { onKey(e) { if (e.key === 'Escape') go('home'); } };
+  };
+
+  /* ============================== Übungsblätter ============================== */
+  const TYPES = M.aufgabenTypen || [];
+  const typeById = (id) => TYPES.find((t) => t.id === id) || { id, name: id, icon: '•' };
+  const SUBJ_SHORT = { la: 'LA', an: 'AN', eis: 'EiS' };
+  const SHEET_WORD = { la: 'Serie', an: 'Serie', eis: 'Blatt' };
+  function parseExercises(raw) {
+    const out = []; let subj = null, serie = 0, ex = null, order = 0;
+    String(raw || '').split(/\r?\n/).forEach((line) => {
+      const t = line.trim(); if (!t) return;
+      if (t.startsWith('# ')) { const p = t.slice(2).trim().split(/\s+/); subj = p[0]; serie = +p[1]; return; }
+      if (t.startsWith('A ')) {
+        const p = t.slice(2).split('|').map((s) => s.trim());
+        ex = { id: subj + '-' + serie + '-' + p[0], subj, serie, nr: p[0], title: p[1], types: (p[2] || '').split(',').map((s) => s.trim()).filter(Boolean), ch: p[3], level: p[4], gen: p[5], text: '', sol: '', src: '', order: order++ };
+        out.push(ex); return;
+      }
+      const m = t.match(/^([?LS]) (.*)$/); if (!m || !ex) return;
+      if (m[1] === '?') ex.text += (ex.text ? ' ' : '') + m[2]; else if (m[1] === 'L') ex.sol += (ex.sol ? ' ' : '') + m[2]; else ex.src = m[2];
+    });
+    out.forEach((x) => { x.search = (x.title + ' ' + x.text + ' ' + x.sol + ' ' + x.src + ' ' + x.types.map((t) => typeById(t).name).join(' ') + ' ' + SUBJ_SHORT[x.subj] + ' ' + SHEET_WORD[x.subj] + ' ' + x.serie + ' ' + x.nr + ' ' + (chById(x.ch) || {}).title).toLowerCase().replace(/[\\${}]/g, ' '); });
+    return out;
+  }
+  const EXERCISES = parseExercises(M.raw && M.raw.uebungen);
+  const exLabel = (x) => SUBJ_SHORT[x.subj] + ' · ' + SHEET_WORD[x.subj] + ' ' + x.serie + ' · ' + (x.subj === 'eis' ? 'Aufgabe ' : '') + x.nr;
+
+  SCREENS.uebungen = function (cfg) {
+    cfg = cfg || {};
+    if (!S.ex) S.ex = {};
+    const st = { tab: cfg.tab || 'aufgaben', subj: cfg.subj || 'all', type: cfg.type || 'all', serie: 'all', q: '', open: {} };
+    function filtered() {
+      const words = st.q.toLowerCase().split(/\s+/).filter(Boolean);
+      return EXERCISES.filter((x) => (st.subj === 'all' || x.subj === st.subj) && (st.type === 'all' || x.types.includes(st.type)) &&
+        (st.serie === 'all' || x.serie === +st.serie) && words.every((w) => x.search.includes(w)));
+    }
+    function shell() {
+      const subjChips = [['all', 'Alle Fächer']].concat(SUBJECTS.map((s) => [s.id, s.icon + ' ' + s.title])).map((s) => '<button class="chip toggle' + (st.subj === s[0] ? ' on' : '') + '" data-fsubj="' + s[0] + '">' + s[1] + '</button>').join('');
+      const done = EXERCISES.filter((x) => S.ex[x.id] && S.ex[x.id].done).length;
+      view('<div class="crumbs"><button class="link" data-back>← Zurück</button></div>' +
+        '<h1 class="page">📚 Übungsblätter</h1><p class="muted">' + EXERCISES.length + ' Aufgaben aus allen Serien, jede kategorisiert und mit Skriptstelle. ' + done + ' als erledigt markiert. Die Aufgaben sind sinngemäss zusammengefasst – die Originale stehen auf den Blättern.</p>' +
+        '<div class="tabs"><button class="tab' + (st.tab === 'aufgaben' ? ' on' : '') + '" data-tab="aufgaben">Aufgaben</button><button class="tab' + (st.tab === 'typen' ? ' on' : '') + '" data-tab="typen">Aufgabentypen</button></div>' +
+        '<div class="chips">' + subjChips + '</div><div id="exbody"></div>');
+      body();
+    }
+    function body() {
+      const el = $('#exbody'); if (!el) return;
+      if (st.tab === 'typen') { el.innerHTML = typesView(); renderMath(el); return; }
+      const series = [...new Set(EXERCISES.filter((x) => st.subj === 'all' || x.subj === st.subj).map((x) => x.serie))].sort((a, b) => a - b);
+      el.innerHTML = '<div class="exfilters"><input id="exq" type="search" placeholder="Suchen: z.B. Induktion, Bayes, Konvergenzradius, Serie 4 …" value="' + st.q.replace(/"/g, '&quot;') + '">' +
+        '<select id="extype"><option value="all">Alle Typen</option>' + TYPES.map((t) => '<option value="' + t.id + '"' + (st.type === t.id ? ' selected' : '') + '>' + t.icon + ' ' + t.name + '</option>').join('') + '</select>' +
+        '<select id="exserie"><option value="all">Alle Serien/Blätter</option>' + series.map((s) => '<option value="' + s + '"' + (String(st.serie) === String(s) ? ' selected' : '') + '>Nr. ' + s + '</option>').join('') + '</select></div>' +
+        '<div id="exlist"></div>';
+      list();
+    }
+    function list() {
+      const el = $('#exlist'); if (!el) return;
+      const xs = filtered();
+      if (!xs.length) { el.innerHTML = '<div class="empty"><p>Keine Aufgabe passt zu diesen Filtern.</p></div>'; return; }
+      let html = '<p class="muted small">' + xs.length + ' Aufgabe' + (xs.length === 1 ? '' : 'n') + '</p>';
+      // Index (Inhaltsverzeichnis)
+      const groups = [];
+      xs.forEach((x) => { const k = x.subj + '-' + x.serie; let g = groups.find((y) => y.k === k); if (!g) { g = { k, subj: x.subj, serie: x.serie, items: [] }; groups.push(g); } g.items.push(x); });
+      html += '<nav class="exindex">' + groups.map((g) => '<a href="#g-' + g.k + '" data-jump="g-' + g.k + '">' + SUBJ_SHORT[g.subj] + ' ' + g.serie + ' <small>(' + g.items.length + ')</small></a>').join('') + '</nav>';
+      let curSubj = null;
+      groups.forEach((g) => {
+        if (g.subj !== curSubj) { curSubj = g.subj; const s = SUBJECTS.find((y) => y.id === g.subj); html += '<h2 class="sec">' + (s ? s.icon + ' ' + s.title : g.subj) + '</h2>'; }
+        const dn = g.items.filter((x) => S.ex[x.id] && S.ex[x.id].done).length;
+        html += '<div class="exgroup" id="g-' + g.k + '"><div class="exgroup-head"><b>' + SHEET_WORD[g.subj] + ' ' + g.serie + '</b><span class="bar mini"><i style="width:' + (100 * dn / g.items.length) + '%"></i></span><small>' + dn + '/' + g.items.length + ' erledigt</small></div>' + g.items.map(card).join('') + '</div>';
+      });
+      el.innerHTML = html; renderMath(el);
+    }
+    function card(x) {
+      const done = S.ex[x.id] && S.ex[x.id].done, ch = chById(x.ch);
+      const gen = M.gen && M.gen.has(x.gen);
+      return '<article class="excard' + (done ? ' done' : '') + '" data-id="' + x.id + '"><div class="exhead"><span class="exid">' + exLabel(x) + '</span><span class="tag ' + (x.level === 'Basis' || /Level A$/.test(x.level) ? '' : 'alt') + '">' + x.level + '</span></div>' +
+        '<h3>' + amp(x.title) + '</h3><p>' + amp(x.text) + '</p>' +
+        '<div class="extypes">' + x.types.map((t) => { const T2 = typeById(t); return '<button class="chip mini" data-ftype="' + t + '">' + T2.icon + ' ' + T2.name + '</button>'; }).join('') + '</div>' +
+        '<details><summary>Ergebnis / Lösungsidee</summary><p>' + amp(x.sol) + '</p></details>' +
+        '<p class="src">📖 ' + amp(x.src) + (ch ? ' · Kapitel „' + ch.title + '"' : '') + '</p>' +
+        '<div class="exactions">' + (gen ? '<button class="btn primary sm" data-gen="' + x.id + '">🎲 Ähnliche Aufgabe</button>' : '') +
+        (ch ? '<button class="btn sm" data-practice="' + x.ch + '">Kapitel üben</button>' : '') +
+        '<button class="btn sm' + (done ? ' ok' : '') + '" data-done="' + x.id + '">' + (done ? '✓ Erledigt' : 'Als erledigt markieren') + '</button></div>' +
+        '<div class="genbox" id="gen-' + x.id + '"></div></article>';
+    }
+    function typesView() {
+      const subjIds = SUBJECTS.map((s) => s.id);
+      return '<div class="typegrid">' + TYPES.map((t) => {
+        const cnt = subjIds.map((s) => EXERCISES.filter((x) => x.subj === s && x.types.includes(t.id)).length);
+        const total = cnt.reduce((a, b) => a + b, 0); if (!total) return '';
+        const prim = EXERCISES.filter((x) => x.types[0] === t.id).length;
+        return '<div class="typecard"><div class="typehead"><span class="ticon">' + t.icon + '</span><b>' + t.name + '</b></div><p>' + t.desc + '</p><p class="how"><b>Vorgehen:</b> ' + t.how + '</p>' +
+          '<div class="typecounts">' + SUBJECTS.map((s, i) => '<span>' + s.icon + ' ' + cnt[i] + '</span>').join('') + '<span class="muted">· ' + prim + '× als Haupttyp</span></div>' +
+          '<button class="btn sm" data-showtype="' + t.id + '">' + total + ' Aufgaben anzeigen</button></div>';
+      }).join('') + '</div>';
+    }
+    function generate(id) {
+      const x = EXERCISES.find((y) => y.id === id); const box = $('#gen-' + CSS.escape(id)); if (!x || !box) return;
+      const r = M.gen.run(x.gen, { chapter: chById });
+      if (!r) { box.innerHTML = '<p class="muted">Für diese Aufgabe gibt es noch keinen Generator.</p>'; return; }
+      S.ex[id] = Object.assign(S.ex[id] || {}, { gens: ((S.ex[id] || {}).gens || 0) + 1 }); save();
+      box.innerHTML = '<div class="gen"><div class="gen-head"><b>🎲 Ähnliche Aufgabe</b><small>' + typeById(x.types[0]).icon + ' ' + typeById(x.types[0]).name + '</small></div><div class="gen-q">' + amp(r.q) + '</div>' +
+        '<details><summary>Lösung anzeigen</summary><div class="gen-a">' + amp(r.a) + '</div></details>' +
+        '<div class="exactions"><button class="btn sm" data-gen="' + id + '">↻ Neue Variante</button><button class="btn primary sm" data-solved="' + id + '">✓ Gelöst (+15 XP)</button></div></div>';
+      renderMath(box); SFX.flip();
+    }
+    let tmr = null;
+    app.oninput = (e) => {
+      if (e.target.id === 'exq') { st.q = e.target.value; clearTimeout(tmr); tmr = setTimeout(list, 150); }
+    };
+    app.onchange = (e) => {
+      if (e.target.id === 'extype') { st.type = e.target.value; list(); }
+      if (e.target.id === 'exserie') { st.serie = e.target.value; list(); }
+    };
+    app.onclick = (e) => {
+      const a = e.target.closest('[data-jump]'); if (a) { e.preventDefault(); const t = document.getElementById(a.dataset.jump); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-back')) return go(cfg.subj ? 'hub' : 'home');
+      if (b.dataset.tab) { st.tab = b.dataset.tab; shell(); return; }
+      if (b.dataset.fsubj) { st.subj = b.dataset.fsubj; st.serie = 'all'; shell(); return; }
+      if (b.dataset.ftype) { st.type = b.dataset.ftype; st.tab = 'aufgaben'; shell(); window.scrollTo(0, 0); return; }
+      if (b.dataset.showtype) { st.type = b.dataset.showtype; st.tab = 'aufgaben'; shell(); window.scrollTo(0, 0); return; }
+      if (b.dataset.gen) return generate(b.dataset.gen);
+      if (b.dataset.practice) {
+        const c = chById(b.dataset.practice), owner = SUBJECTS.find((s) => s.chapters.includes(c));
+        if (owner) setSubject(owner.id);
+        return go('quiz', { mode: 'train', items: shuffle(pickByPriority(c.questions, S.q, 10)), label: c.title });
+      }
+      if (b.dataset.done) {
+        const id = b.dataset.done, r = S.ex[id] || {}; r.done = !r.done; S.ex[id] = r;
+        if (r.done && !r.xpDone) { r.xpDone = true; addXP(10, b); SFX.good(3); }
+        save(); const art = b.closest('.excard'); art.classList.toggle('done', r.done); b.classList.toggle('ok', r.done); b.textContent = r.done ? '✓ Erledigt' : 'Als erledigt markieren';
+        return;
+      }
+      if (b.dataset.solved) { const r = S.ex[b.dataset.solved] || {}; r.solved = (r.solved || 0) + 1; S.ex[b.dataset.solved] = r; D().correct++; addXP(15, b); SFX.good(5); if (r.solved % 3 === 0) confetti(60, innerWidth / 2, 200); b.disabled = true; b.textContent = '✓ Gelöst'; save(); return; }
+    };
+    screen = { onKey(e) { if (e.key === 'Escape' && e.target.tagName !== 'INPUT') go(cfg.subj ? 'hub' : 'home'); }, cleanup() { app.oninput = null; app.onchange = null; } };
+    shell();
   };
 
   /* ============================== Start ============================== */

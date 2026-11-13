@@ -10,6 +10,17 @@ Höhere Mathematik spielerisch lernen – Definitionen pauken, Formeln festigen,
 
 Jede Frage und jede Karte nennt die **Skriptseite** (gedruckte Seitenzahl, wie im Inhaltsverzeichnis) und, wo sie aus einer Übung stammt, die **Serienaufgabe**, z.B. `Skript S. 63, Quotientenkriterium · Serie 6, Aufgabe 6.2`.
 
+## Übungsblätter
+
+Alle 180 Aufgaben der Übungsblätter (LA 81 inkl. freiwilliger Aufgaben, Analysis 40, EiS 59) sind einzeln erfasst – sinngemäss zusammengefasst, nicht kopiert:
+
+- **Index:** Fach → Serie/Blatt → Aufgabe, mit Sprungmarken und Fortschritt pro Serie
+- **Suche:** Volltext über Titel, Beschreibung, Lösungsidee, Skriptstelle, Typ und Kapitel
+- **Kategorien:** jede Aufgabe hat einen Haupttyp und ggf. Nebentypen (23 Typen, Übersicht mit Vorgehen im Reiter „Aufgabentypen“)
+- **🎲 Ähnliche Aufgabe:** erzeugt eine neue Variante mit Lösung. Rechenaufgaben bekommen zufällige Parameter, die Lösung wird exakt berechnet (Brüche, Gauss, Aufzählung). Beweis- und Wahr/Falsch-Aufgaben kommen aus geprüften Pools.
+
+Daten: `js/data/uebungen.js` (Katalog und Typen), Generatoren: `js/gen.js`.
+
 ## Spielmodi
 
 | Modus | Was passiert |

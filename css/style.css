@@ -319,3 +319,48 @@ h1, h2 { line-height: 1.15; margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ============ Übungsblätter ============ */
+.tile.wide-tile { width: 100%; }
+.tabs { display: flex; gap: 6px; margin: 14px 0 10px; border-bottom: 1px solid var(--line); }
+.tab { padding: 10px 16px; border: 0; background: none; font-weight: 800; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tab.on { color: var(--text); border-bottom-color: var(--primary); }
+.exfilters { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin: 14px 0 6px; }
+.exfilters input, .exfilters select { min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-weight: 700; }
+.exfilters input:focus, .exfilters select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.small { font-size: .88rem; }
+.exindex { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.exindex a { padding: 4px 10px; border-radius: 99px; background: var(--card2); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-weight: 800; font-size: .85rem; }
+.exindex a small { color: var(--muted); }
+.exgroup { scroll-margin-top: 70px; margin-bottom: 18px; }
+.exgroup-head { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.exgroup-head small { color: var(--muted); white-space: nowrap; }
+.bar.mini { flex: 1; max-width: 160px; margin: 0; height: 7px; }
+.excard { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 10px 0; box-shadow: var(--shadow); }
+.excard.done { border-color: var(--good); }
+.excard h3 { margin: 6px 0 4px; font-size: 1.05rem; }
+.excard p { margin: 6px 0; overflow-wrap: anywhere; }
+.exhead { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.exid { font-weight: 900; color: var(--primary2); font-size: .85rem; letter-spacing: .02em; }
+.extypes { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip.mini { padding: 3px 9px; font-size: .78rem; }
+.excard details, .gen details { margin: 8px 0; }
+.excard summary, .gen summary { cursor: pointer; font-weight: 800; color: var(--primary2); }
+.exactions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn.sm { padding: 8px 12px; font-size: .88rem; border-radius: 11px; }
+.btn.ok { border-color: var(--good); color: var(--good); }
+.gen { margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px dashed var(--primary); animation: slideup .25s ease-out; }
+.gen-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.gen-head small { color: var(--muted); }
+.gen-q, .gen-a { overflow-wrap: anywhere; }
+.gen-list { margin: 8px 0; padding-left: 22px; }
+.gen-list li { margin: 4px 0; }
+.typegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
+.typecard { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.typecard p { margin: 4px 0; }
+.typecard .how { color: var(--muted); font-size: .92rem; }
+.typehead { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+.typehead .ticon { font-size: 1.5rem; }
+.typecounts { display: flex; flex-wrap: wrap; gap: 10px; font-weight: 800; margin: 4px 0 8px; }
+.typecard .btn { align-self: flex-start; margin-top: auto; }
+@media (max-width: 560px) { .exfilters { grid-template-columns: 1fr 1fr; } .exfilters input { grid-column: 1 / -1; } }
